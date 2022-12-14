@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.SessionAttributes;
 import org.springframework.web.bind.support.SessionStatus;
+import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
 import jakarta.validation.Valid;
 import mx.springboot.datajpa.app.models.entity.Cliente;
@@ -22,7 +23,7 @@ import mx.springboot.datajpa.app.models.service.IClienteService;
 @SessionAttributes("cliente")
 public class ClienteController {
 
-	// Inyeccion de DAO
+	// Inyeccion de Service
 	@Autowired
 	@Qualifier(value = "clienteService")
 	private IClienteService clienteService;
@@ -43,13 +44,18 @@ public class ClienteController {
 	}
 
 	@RequestMapping(value = "/form/{id}") // Mostrar Form con data del Cliente para comenzar a EDITAR
-	public String editarCliente(Map<String, Object> modelo, @PathVariable(value = "id") Long id) {
+	public String editarCliente(Map<String, Object> modelo, @PathVariable(value = "id") Long id, RedirectAttributes flash) {
 		
 		Cliente clienteToEdit = null;
 		
 		if (id > 0) {
 			clienteToEdit = clienteService.obtenerPorId(id);
+			if(clienteToEdit == null) {
+				flash.addFlashAttribute("error","Cliente no existe en la Base  de Datos.");
+				return "redirect:/listar";
+			}
 		} else {
+			flash.addFlashAttribute("error","Id de Cliente no puede ser menor o igual a 0.");
 			return "redirect:/listar";
 		}
 		
@@ -59,7 +65,7 @@ public class ClienteController {
 	}
 
 	@RequestMapping(value = "/form", method = RequestMethod.POST)
-	public String guardarCliente(@Valid Cliente cliente, BindingResult result, Model modelo, SessionStatus status) { 
+	public String guardarCliente(@Valid Cliente cliente, BindingResult result, Model modelo, SessionStatus status, RedirectAttributes flash) { 
 		// Recibe y valida el cliente con los datos cargados
 
 		if (result.hasErrors()) { // Si se encuentrar errores, retornar al formulario con sus errores detectados
@@ -68,17 +74,21 @@ public class ClienteController {
 			modelo.addAttribute("titulo", "Agregar Cliente");
 			return "form";
 		}
-
+		//Modifica el mensaje si existe o no el id del cliente actual en la session
+		String mensajeFlash = (cliente.getId() != null) ? "Cliente actualizado exitosamente." : "Cliente creado exitosamente.";
+		
 		clienteService.guardarCliente(cliente);
 		status.setComplete();	//Eliminar el obj Cliente de la Sesion
+		flash.addFlashAttribute("success",mensajeFlash);
 		return "redirect:/listar";
 	}
 
 	@RequestMapping(value="/eliminar/{id}")
-	public String eliminarCliente(@PathVariable(name="id") Long id) {
+	public String eliminarCliente(@PathVariable(name="id") Long id, RedirectAttributes flash) {
 		
 		if(id >0) {
 			clienteService.eliminarCliente(id);
+			flash.addFlashAttribute("success","Cliente eliminado exitosamente.");
 		}
 		
 		return"redirect:/listar";

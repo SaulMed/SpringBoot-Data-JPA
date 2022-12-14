@@ -18,25 +18,25 @@ public class ClienteServiceImp implements IClienteService {
 	@Transactional(readOnly = true)
 	@Override
 	public List<Cliente> obtenerTodosLosClientes() {
-		return clienteDao.obtenerTodosLosClientes();
+		return clienteDao.findAll();
 	}
 
 	@Transactional // Indicar que permite la escritura
 	@Override
 	public void guardarCliente(Cliente cliente) {
-		clienteDao.guardarCliente(cliente);
+		clienteDao.save(cliente);
 	}
 
 	@Transactional(readOnly = true)
 	@Override
 	public Cliente obtenerPorId(Long id) {
-		return clienteDao.obtenerPorId(id);
+		return clienteDao.findById(id).orElse(null);
 	}
 
 	@Transactional
 	@Override
 	public void eliminarCliente(Long id) {
-		clienteDao.eliminarCliente(id);
+		clienteDao.deleteById(id);
 	}
 
 }
