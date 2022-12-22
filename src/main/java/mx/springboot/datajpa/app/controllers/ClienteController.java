@@ -4,12 +4,16 @@ import java.util.Map;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.validation.BindingResult;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.SessionAttributes;
 import org.springframework.web.bind.support.SessionStatus;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
@@ -17,6 +21,7 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 import jakarta.validation.Valid;
 import mx.springboot.datajpa.app.models.entity.Cliente;
 import mx.springboot.datajpa.app.models.service.IClienteService;
+import mx.springboot.datajpa.app.util.paginator.PageRender;
 
 
 @Controller
@@ -29,9 +34,23 @@ public class ClienteController {
 	private IClienteService clienteService;
 
 	@RequestMapping(value = { "", "/", "/listar" }, method = RequestMethod.GET)
-	public String listar(Model modelo) {
+	public String listar(@RequestParam(name="pagina", defaultValue = "0") int page, Model modelo) {
+		//Trabajar la paginacion con su metodo estatico, indicanto 4 registros por pagina
+		Pageable pageRequest = PageRequest.of(page, 5);
+		
+		//Realizar la invocacion del service findAll(Pageable)
+		Page<Cliente> clientes = clienteService.obtenerTodosLosClientes(pageRequest);
+		
+		PageRender<Cliente> pageRender = new PageRender<>("/listar", clientes);
+		//Cargar atributos al modelo
 		modelo.addAttribute("titulo", "Listado Clientes");
-		modelo.addAttribute("clientes", clienteService.obtenerTodosLosClientes());
+		
+		//Llamar al service para obtener ALGUNOS cliente, TRABAJANDO PAGINACION
+		modelo.addAttribute("clientes", clientes);
+		modelo.addAttribute("page", pageRender);
+		
+		//Llamar al service para obtener TODOS los clientes , SIN PAGINACION
+		//modelo.addAttribute("clientes", clienteService.obtenerTodosLosClientes());
 		return "listar";
 	}
 
