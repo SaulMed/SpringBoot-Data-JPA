@@ -1,16 +1,25 @@
 package mx.springboot.datajpa.app.controllers;
 
+import java.io.File;
 import java.io.IOException;
+import java.net.MalformedURLException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Map;
+import java.util.UUID;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.core.io.Resource;
+import org.springframework.core.io.UrlResource;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.validation.BindingResult;
@@ -27,8 +36,8 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 import jakarta.validation.Valid;
 import mx.springboot.datajpa.app.models.entity.Cliente;
 import mx.springboot.datajpa.app.models.service.IClienteService;
+import mx.springboot.datajpa.app.models.service.IUploadFileService;
 import mx.springboot.datajpa.app.util.paginator.PageRender;
-
 
 @Controller
 @SessionAttributes("cliente")
@@ -38,40 +47,61 @@ public class ClienteController {
 	@Autowired
 	@Qualifier(value = "clienteService")
 	private IClienteService clienteService;
-	
+
+	@Autowired
+	private IUploadFileService uploadFileService;
+
+	// Carga de imagenes de forma programatica
+	@GetMapping(value = "/uploads/{filename:.+}")
+	public ResponseEntity<Resource> subirFoto(@PathVariable String filename) {
+
+		Resource recurso = null;
+		try {
+			recurso = uploadFileService.cargarFoto(filename);
+		} catch (MalformedURLException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+
+		return ResponseEntity.ok() // Carga de imagen en el cuerpo de la respuesta Http
+				.header(HttpHeaders.CONTENT_DISPOSITION, "attachment: filename= \"" + recurso.getFilename() + "\" ")
+				.body(recurso);
+	}
+
 	@GetMapping("/detalles/{id}")
-	public String detalles(@PathVariable(name="id") Long id, Map<String, Object> modelo, RedirectAttributes flash) {
+	public String detalles(@PathVariable(name = "id") Long id, Map<String, Object> modelo, RedirectAttributes flash) {
 		Cliente cliente = clienteService.obtenerPorId(id);
-		
-		if(cliente==null) {
-			flash.addFlashAttribute("error","Cliente no encontrado en la base de datos.");
+
+		if (cliente == null) {
+			flash.addFlashAttribute("error", "Cliente no encontrado en la base de datos.");
 			return "redirect:/listar";
 		}
-		
-		modelo.put("cliente",cliente);
+
+		modelo.put("cliente", cliente);
 		modelo.put("titulo", "Detalles de " + cliente.getNombre() + " " + cliente.getApellido());
-		
+
 		return "detalles";
 	}
 
 	@RequestMapping(value = { "", "/", "/listar" }, method = RequestMethod.GET)
-	public String listar(@RequestParam(name="pagina", defaultValue = "0") int page, Model modelo) {
-		//Trabajar la paginacion con su metodo estatico, indicanto 4 registros por pagina
+	public String listar(@RequestParam(name = "pagina", defaultValue = "0") int page, Model modelo) {
+		// Trabajar la paginacion con su metodo estatico, indicanto 4 registros por
+		// pagina
 		Pageable pageRequest = PageRequest.of(page, 5);
-		
-		//Realizar la invocacion del service findAll(Pageable)
+
+		// Realizar la invocacion del service findAll(Pageable)
 		Page<Cliente> clientes = clienteService.obtenerTodosLosClientes(pageRequest);
-		
+
 		PageRender<Cliente> pageRender = new PageRender<>("/listar", clientes);
-		//Cargar atributos al modelo
+		// Cargar atributos al modelo
 		modelo.addAttribute("titulo", "Listado Clientes");
-		
-		//Llamar al service para obtener ALGUNOS cliente, TRABAJANDO PAGINACION
+
+		// Llamar al service para obtener ALGUNOS cliente, TRABAJANDO PAGINACION
 		modelo.addAttribute("clientes", clientes);
 		modelo.addAttribute("page", pageRender);
-		
-		//Llamar al service para obtener TODOS los clientes , SIN PAGINACION
-		//modelo.addAttribute("clientes", clienteService.obtenerTodosLosClientes());
+
+		// Llamar al service para obtener TODOS los clientes , SIN PAGINACION
+		// modelo.addAttribute("clientes", clienteService.obtenerTodosLosClientes());
 		return "listar";
 	}
 
@@ -84,28 +114,30 @@ public class ClienteController {
 	}
 
 	@RequestMapping(value = "/form/{id}") // Mostrar Form con data del Cliente para comenzar a EDITAR
-	public String editarCliente(Map<String, Object> modelo, @PathVariable(value = "id") Long id, RedirectAttributes flash) {
-		
+	public String editarCliente(Map<String, Object> modelo, @PathVariable(value = "id") Long id,
+			RedirectAttributes flash) {
+
 		Cliente clienteToEdit = null;
-		
+
 		if (id > 0) {
 			clienteToEdit = clienteService.obtenerPorId(id);
-			if(clienteToEdit == null) {
-				flash.addFlashAttribute("error","Cliente no existe en la Base  de Datos.");
+			if (clienteToEdit == null) {
+				flash.addFlashAttribute("error", "Cliente no existe en la Base  de Datos.");
 				return "redirect:/listar";
 			}
 		} else {
-			flash.addFlashAttribute("error","Id de Cliente no puede ser menor o igual a 0.");
+			flash.addFlashAttribute("error", "Id de Cliente no puede ser menor o igual a 0.");
 			return "redirect:/listar";
 		}
-		
+
 		modelo.put("cliente", clienteToEdit);
 		modelo.put("titulo", "Editar Cliente");
 		return "form";
 	}
 
 	@RequestMapping(value = "/form", method = RequestMethod.POST)
-	public String guardarCliente(@Valid Cliente cliente, BindingResult result, Model modelo,@RequestParam("file") MultipartFile foto, SessionStatus status, RedirectAttributes flash) { 
+	public String guardarCliente(@Valid Cliente cliente, BindingResult result, Model modelo,
+			@RequestParam("file") MultipartFile foto, SessionStatus status, RedirectAttributes flash) {
 		// Recibe y valida el cliente con los datos cargados
 
 		if (result.hasErrors()) { // Si se encuentrar errores, retornar al formulario con sus errores detectados
@@ -114,45 +146,54 @@ public class ClienteController {
 			modelo.addAttribute("titulo", "Agregar Cliente");
 			return "form";
 		}
-		
-		if(!foto.isEmpty()) {//Si foto no es vacio guardar en uploads
-			//Ruta dentro del proyecto, NO recomendada
-//			Path rutaUploads = Paths.get("src//main/resources//static/uploads");
-//			String rootPath = rutaUploads.toFile().getAbsolutePath();
 
-			//Ruta fuera del proyecto , recomendada (Windows)
-			String rootPath = "C://Temp//uploads";
-			
+		if (!foto.isEmpty()) {// Si foto no es vacio guardar en uploads
+
+			if (cliente.getId() != null && // Confirmar si este usuario esta en la DB y contiene una foto a reemplazar
+					cliente.getId() > 0 && cliente.getFoto() != null && cliente.getFoto().length() > 0) {
+				// Validar que el archivo exista para su reemplazo
+				uploadFileService.eliminar(cliente.getFoto());
+			}
+
+			String uniqueFilename = null;
 			try {
-				byte[] bytes = foto.getBytes();
-				Path rutaCompleta = Paths.get(rootPath + "//" + foto.getOriginalFilename());	//Union de ruta y nombre archivo
-				Files.write(rutaCompleta, bytes);	//Escribir en el directorio
-				flash.addFlashAttribute("info", foto.getOriginalFilename() + " subida correctamente.");	//Arrojar alerta de exito
-				cliente.setFoto(foto.getOriginalFilename());	//Guardar en la DB
+				uniqueFilename = uploadFileService.copiar(foto);
 			} catch (IOException e) {
 				// TODO Auto-generated catch block
 				e.printStackTrace();
 			}
+
+			flash.addFlashAttribute("info", uniqueFilename + " subida correctamente."); // Arrojar alerta de exito
+			cliente.setFoto(uniqueFilename); // Guardar en la DB
+
 		}
-		
-		//Modifica el mensaje si existe o no el id del cliente actual en la session
-		String mensajeFlash = (cliente.getId() != null) ? "Cliente actualizado exitosamente." : "Cliente creado exitosamente.";
-		
+
+		// Modifica el mensaje si existe o no el id del cliente actual en la session
+		String mensajeFlash = (cliente.getId() != null) ? "Cliente actualizado exitosamente."
+				: "Cliente creado exitosamente.";
+
 		clienteService.guardarCliente(cliente);
-		status.setComplete();	//Eliminar el obj Cliente de la Sesion
-		flash.addFlashAttribute("success",mensajeFlash);
+		status.setComplete(); // Eliminar el obj Cliente de la Sesion
+		flash.addFlashAttribute("success", mensajeFlash);
 		return "redirect:/listar";
 	}
 
-	@RequestMapping(value="/eliminar/{id}")
-	public String eliminarCliente(@PathVariable(name="id") Long id, RedirectAttributes flash) {
-		
-		if(id >0) {
+	@RequestMapping(value = "/eliminar/{id}")
+	public String eliminarCliente(@PathVariable(name = "id") Long id, RedirectAttributes flash) {
+
+		if (id > 0) {
+			Cliente cliente = clienteService.obtenerPorId(id);
+
 			clienteService.eliminarCliente(id);
-			flash.addFlashAttribute("success","Cliente eliminado exitosamente.");
+			flash.addFlashAttribute("success", "Cliente eliminado exitosamente.");
+
+			if (uploadFileService.eliminar(cliente.getFoto())) {
+				flash.addFlashAttribute("info", "Foto " + cliente.getFoto() + " eliminada con éxito.");
+			}
+
 		}
-		
-		return"redirect:/listar";
+
+		return "redirect:/listar";
 	}
-	
+
 }
